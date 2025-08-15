@@ -340,7 +340,7 @@ jobs:
         cd build
         ninja
         
-    - name: Create macOS bundle and package
+    - name: Create macOS bundle
       run: |
         cd build
         
@@ -351,8 +351,8 @@ jobs:
           exit 1
         fi
         
-        # Use macdeployqt to handle dependencies
-        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app
+        # Use -no-strip to prevent potential issues
+        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app -no-strip
 
     - name: Manually bundle FFmpeg and fix all paths
       run: |
@@ -404,6 +404,22 @@ jobs:
             install_name_tool -change "$dep_path" "@rpath/$dep_basename" "$target"
           done
         done
+        
+    - name: Fix broken framework symlinks
+      run: |
+        cd build/YUViz.app/Contents/Frameworks
+        echo "Fixing framework symlinks..."
+        for framework in *.framework; do
+          FRAMEWORK_NAME=$(basename "$framework" .framework)
+          echo "--> Processing $FRAMEWORK_NAME"
+          cd "$framework"
+          # Forcefully remove and recreate the symlinks to be relative
+          rm -f "$FRAMEWORK_NAME" Versions/Current
+          ln -s A Versions/Current
+          ln -s "Versions/Current/$FRAMEWORK_NAME" "$FRAMEWORK_NAME"
+          cd ..
+        done
+        echo "Symlink fix complete."
 
     - name: Create macOS package
       run: |
