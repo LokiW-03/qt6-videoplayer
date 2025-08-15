@@ -351,7 +351,16 @@ jobs:
           exit 1
         fi
         
-        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app -no-strip -no-plugins -no-system-libs
+        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app -no-strip
+
+    - name: Clean up unnecessary libraries bundled by macdeployqt
+      run: |
+        cd build/YUViz.app/Contents/Frameworks
+        echo "Initial bundle contents:"
+        ls -l
+        find . -maxdepth 1 -not -name "Qt*.framework" -exec rm -rf {} +
+        echo "Cleaned bundle contents:"
+        ls -l
 
     - name: Manually bundle FFmpeg and fix all paths
       run: |
