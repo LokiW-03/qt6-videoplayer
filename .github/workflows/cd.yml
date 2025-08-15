@@ -358,7 +358,7 @@ jobs:
         cd build/YUViz.app/Contents/Frameworks
         echo "Initial bundle contents:"
         ls -l
-        find . -maxdepth 1 -not -name "Qt*.framework" -exec rm -rf {} +
+        find . -mindepth 1 -maxdepth 1 -not -name "Qt*.framework" -exec rm -rf {} +
         echo "Cleaned bundle contents:"
         ls -l
 
