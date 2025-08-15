@@ -351,8 +351,7 @@ jobs:
           exit 1
         fi
         
-        # Use -no-strip to prevent potential issues
-        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app -no-strip
+        $(brew --prefix qt@6)/bin/macdeployqt YUViz.app -no-strip -no-plugins -no-system-libs
 
     - name: Manually bundle FFmpeg and fix all paths
       run: |
@@ -360,47 +359,18 @@ jobs:
         APP_BUNDLE="YUViz.app"
         FRAMEWORKS_DIR="${APP_BUNDLE}/Contents/Frameworks"
         EXECUTABLE_PATH="${APP_BUNDLE}/Contents/MacOS/YUViz"
-        
-        # Get the original location of ffmpeg libs from Homebrew
-        FFMPEG_LIB_DIR=$(brew --prefix ffmpeg)/lib
-        
-        # Create a list of all ffmpeg dylibs required by the executable
         FFMPEG_LIBS=$(otool -L "$EXECUTABLE_PATH" | grep /opt/homebrew/opt/ffmpeg | awk '{print $1}')
-        
-        if [ -z "$FFMPEG_LIBS" ]; then
-          echo "No external FFmpeg libraries found linked to the executable. Checking existing frameworks..."
-          FFMPEG_LIBS=$(ls "$FRAMEWORKS_DIR"/libav*.dylib "$FRAMEWORKS_DIR"/libsw*.dylib 2>/dev/null)
-        fi
-
-        echo "--- Required FFmpeg libraries ---"
-        echo "$FFMPEG_LIBS"
-        echo "---------------------------------"
-        
-        # Copy the libraries if they are not already there
-        for lib_path in $FFMPEG_LIBS; do
-          if [[ "$lib_path" == /opt/homebrew/* ]]; then
-            echo "Copying $(basename "$lib_path") to bundle..."
-            cp "$lib_path" "$FRAMEWORKS_DIR"
-          fi
-        done
-        
-        # Fix all paths.
+        echo "--- Copying FFmpeg libraries ---"
+        echo "$FFMPEG_LIBS" | xargs -I {} cp {} "$FRAMEWORKS_DIR"
+        echo "--- Fixing all library paths ---"
         ALL_TARGETS=("$EXECUTABLE_PATH" "${FRAMEWORKS_DIR}"/*.dylib)
-        
         for target in "${ALL_TARGETS[@]}"; do
-          echo "--- Processing target: $(basename "$target") ---"
-          
-          # Change the internal ID of the library itself
           if [[ "$target" == *.dylib ]]; then
             lib_basename=$(basename "$target")
-            echo "Setting ID of $lib_basename to @rpath/$lib_basename"
             install_name_tool -id "@rpath/$lib_basename" "$target"
           fi
-          
-          # Find all its dependencies on ffmpeg libs and fix them
-          otool -L "$target" | grep /opt/homebrew/opt/ffmpeg | awk '{print $1}' | while read -r dep_path; do
+          otool -L "$target" | grep /opt/homebrew | awk '{print $1}' | while read -r dep_path; do
             dep_basename=$(basename "$dep_path")
-            echo "Fixing dependency in $(basename "$target"): $dep_basename"
             install_name_tool -change "$dep_path" "@rpath/$dep_basename" "$target"
           done
         done
@@ -408,25 +378,20 @@ jobs:
     - name: Fix broken framework symlinks
       run: |
         cd build/YUViz.app/Contents/Frameworks
-        echo "Fixing framework symlinks..."
         for framework in *.framework; do
           FRAMEWORK_NAME=$(basename "$framework" .framework)
-          echo "--> Processing $FRAMEWORK_NAME"
           cd "$framework"
-          # Forcefully remove and recreate the symlinks to be relative
           rm -f "$FRAMEWORK_NAME" Versions/Current
           ln -s A Versions/Current
           ln -s "Versions/Current/$FRAMEWORK_NAME" "$FRAMEWORK_NAME"
           cd ..
         done
-        echo "Symlink fix complete."
 
     - name: Create macOS package
       run: |
         cd build
         mkdir -p release-package
         cp -R YUViz.app release-package/
-        # README content...
         cd release-package
         zip -r ../../YUViz-macos.zip .
 
